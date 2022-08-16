@@ -16,7 +16,7 @@ public class InventoryController {
     @Autowired
     private InventoryDAO inventoryDAO;
 
-    @GetMapping(path="/getInvPicture", produces = "application/json")
+    @GetMapping(path="/getAllInv", produces = "application/json")
     public InventoryList getInventoryList ()
     {
 
@@ -25,6 +25,30 @@ public class InventoryController {
 
     @PostMapping(path= "/", consumes = "application/json", produces = "application/json")
     public ResponseEntity<Object> addInventory(
+            @RequestHeader(name = "X-COM-PERSIST", required = true) String headerPersist,
+            @RequestHeader(name = "X-COM-LOCATION", required = false, defaultValue = "ASIA") String headerLocation,
+            @RequestBody Inventory inventory)
+            throws Exception
+    {
+        //Generate resource id
+        Integer id = inventoryDAO.getAllInventory().getinventoryList().size() + 1;
+        inventory.setId(id);
+
+        //add resource
+        inventoryDAO.addInventory(inventory);
+
+        //Create resource location
+        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
+                .path("/{id}")
+                .buildAndExpand(inventory.getId())
+                .toUri();
+
+        //Send location in response
+        return ResponseEntity.created(location).build();
+    }
+
+    @PostMapping(path= "/getInvPicture", consumes = "application/json", produces = "application/json")
+    public ResponseEntity<Object> getInvPicture(
             @RequestHeader(name = "X-COM-PERSIST", required = true) String headerPersist,
             @RequestHeader(name = "X-COM-LOCATION", required = false, defaultValue = "ASIA") String headerLocation,
             @RequestBody Inventory inventory)
