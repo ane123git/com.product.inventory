@@ -13,14 +13,12 @@ import javax.persistence.Id;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class Inventory {
+public class InventoryResponse {
 
 
     private  String productId;
     private String prodName;
-    private String UOM;
-    private  Double availQty;
-    private java.util.Date availDate;
+    private String availQty;
 
 
 }

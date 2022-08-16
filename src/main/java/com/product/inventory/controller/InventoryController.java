@@ -3,18 +3,31 @@ package com.product.inventory.controller;
 import com.product.inventory.dao.InventoryDAO;
 import com.product.inventory.model.Inventory;
 import com.product.inventory.model.InventoryList;
+import com.product.inventory.model.InventoryRequest;
+import com.product.inventory.model.InventoryResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.net.URI;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.util.Date;
+import java.util.List;
 
 @RestController
 public class InventoryController {
 
+
+    private static final Logger logger = LoggerFactory.getLogger(InventoryController.class);
     @Autowired
     private InventoryDAO inventoryDAO;
+
 
     @GetMapping(path="/getAllInv", produces = "application/json")
     public InventoryList getInventoryList ()
@@ -23,51 +36,67 @@ public class InventoryController {
         return inventoryDAO.getAllInventory();
     }
 
-    @PostMapping(path= "/", consumes = "application/json", produces = "application/json")
-    public ResponseEntity<Object> addInventory(
-            @RequestHeader(name = "X-COM-PERSIST", required = true) String headerPersist,
-            @RequestHeader(name = "X-COM-LOCATION", required = false, defaultValue = "ASIA") String headerLocation,
-            @RequestBody Inventory inventory)
-            throws Exception
-    {
-        //Generate resource id
-        Integer id = inventoryDAO.getAllInventory().getinventoryList().size() + 1;
-        inventory.setId(id);
-
-        //add resource
-        inventoryDAO.addInventory(inventory);
-
-        //Create resource location
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{id}")
-                .buildAndExpand(inventory.getId())
-                .toUri();
-
-        //Send location in response
-        return ResponseEntity.created(location).build();
-    }
 
     @PostMapping(path= "/getInvPicture", consumes = "application/json", produces = "application/json")
-    public ResponseEntity<Object> getInvPicture(
-            @RequestHeader(name = "X-COM-PERSIST", required = true) String headerPersist,
-            @RequestHeader(name = "X-COM-LOCATION", required = false, defaultValue = "ASIA") String headerLocation,
-            @RequestBody Inventory inventory)
+    public Object getInvPicture(@RequestBody InventoryRequest inventoryRequest)
             throws Exception
+
+
+
     {
-        //Generate resource id
-        Integer id = inventoryDAO.getAllInventory().getinventoryList().size() + 1;
-        inventory.setId(id);
+        Double sum =0.0;
+        Date inpDtd=new SimpleDateFormat("yyyy-MM-dd").parse(inventoryRequest.getReqDate());
+        LocalDate today = LocalDate.now();
+        LocalDate tenDaysLater = today.plusDays(9);
+        java.util.Date tenDaysLaterDate = java.sql.Date.valueOf(tenDaysLater);
 
-        //add resource
-        inventoryDAO.addInventory(inventory);
+        long ltime = inpDtd.getTime()+8*24*60*60*1000;
 
-        //Create resource location
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{id}")
-                .buildAndExpand(inventory.getId())
-                .toUri();
+        Date supplyVisibility = new Date(ltime);
 
-        //Send location in response
-        return ResponseEntity.created(location).build();
+        Date dateNow = new Date();
+
+        logger.debug("inpDtd: "+inpDtd+", today: "+today,", tenDaysLaterDate: "+tenDaysLaterDate+ ", supplyVisibility: "+supplyVisibility);
+        /*System.out.println(myDate);
+        String a = new SimpleDateFormat("yyyy-MM-dd").parse(myDate);*/
+
+        if (dateNow.after(inpDtd)) {
+            logger.error("Error : Input Date is in past");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Error : Input Date is in past");
+        }
+        else if (inpDtd.after(tenDaysLaterDate)) {
+            logger.error("Error : Input Date is 10 days or more later");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Error : Input Date is 10 days or more later");
+        }
+
+
+
+
+        InventoryList inventoryList= inventoryDAO.getAllInventory();
+
+        List<Inventory> inventoryList_1 = inventoryList.getinventoryList();
+
+        sum=inventoryList_1.stream()
+                .filter(inventory1 -> {
+            Date invDtd = inventory1.getAvailDate();
+            if ((supplyVisibility.equals(invDtd)|| supplyVisibility.after(invDtd)) && (inpDtd.equals(invDtd)|| inpDtd.before(invDtd)) ) {
+                logger.debug("Valid Inv ");
+                return true;
+            }
+                return false;
+                })
+                .mapToDouble(Inventory::getAvailQty)
+                .sum();
+
+
+        logger.debug("sumQty "+sum);
+
+        InventoryResponse objResp= new InventoryResponse();
+        objResp.setAvailQty(sum.toString());
+        objResp.setProdName(inventoryRequest.getProdName());
+        objResp.setProductId(inventoryRequest.getProductId());
+
+
+        return objResp;
     }
 }
